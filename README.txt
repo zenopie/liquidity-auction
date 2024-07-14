@@ -1,47 +1,143 @@
+# Batch Auction Contract
 
-## Secret Network Smart Contract for Fund Distribution by Voting Weight
+This project implements a smart contract for a batch auction system. Users can deposit tokens, start an auction, end the auction, and claim their tokens based on their share of deposits.
 
-### User Focused Summary
+## Features
 
-Welcome to the Secret Network Smart Contract repository for fund distribution by voting weight! This smart contract allows users to stake their ERTH tokens and participate in the allocation of funds based on a weighted voting system. Here's a quick overview of what it does:
+- **Initialize Contract**: Set up the initial state of the contract with auction admin, project token, and paired token information.
+- **Deposit Tokens**: Users can deposit tokens into the auction.
+- **Begin Auction**: The auction admin can start an auction by sending a specified amount of project tokens.
+- **End Auction**: The auction admin can end the auction, transferring the total deposited tokens to the admin.
+- **Claim Tokens**: Users can claim their share of project tokens based on their deposits after the auction ends.
 
-1. **Stake ERTH Tokens**: Stake your ERTH tokens to gain voting power.
-2. **Allocate Funds**: Enter your preferred fund allocation percentages, which must total 100%.
-3. **Consensus Mechanism**: Your allocation preferences are averaged with those of other stakers to reach a consensus on fund distribution.
-4. **Real-time Updates**: See your preferred split and the weighted average of all stakers’ allocations, updated in real-time as staking amounts change.
+## Contract Structure
 
-By participating in this system, you help ensure that funds are distributed effectively and fairly, rewarding efficient public goods institutions and moving away from ineffective ones.
+### State
 
-### Investor Pitch
+The contract state is stored in the `State` struct and includes:
+- `auction_admin`: Address of the auction administrator.
+- `project_snip_contract`: Address of the project token contract.
+- `project_snip_hash`: Hash of the project token contract.
+- `paired_snip_contract`: Address of the paired token contract.
+- `paired_snip_hash`: Hash of the paired token contract.
+- `auction_amount`: Total amount of project tokens available for auction.
+- `total_deposits`: Total amount of paired tokens deposited.
+- `auction_active`: Boolean indicating if the auction is active.
 
-**Problem Statement**:
-Current monopolies over public goods funding often lead to misaligned incentives, creating institutions that can be ineffective and exploitative. Constituents suffer as their needs are not adequately met, and public goods remain suboptimal.
+### Messages
 
-**Solution**:
-Our smart contract introduces free-market values and direct democracy into public goods funding. By enabling granular, decentralized decision-making, we reward effective institutions and transition away from ineffective ones. This system reduces harm and offers alternative governance models, minimizing the risk of corruption and misalignment.
+The contract supports the following messages:
+- `InstantiateMsg`: Initializes the contract state.
+- `ExecuteMsg`: Executes various functions:
+  - `Claim {}`: Claims project tokens based on deposits.
+  - `EndAuction {}`: Ends the auction and transfers deposited tokens to the admin.
+  - `Receive {}`: Handles incoming token transfers and parses them into specific actions (`Deposit {}`, `BeginAuction {}`).
 
-**Product Market Fit**:
-This governance implementation fits in markets where public goods funding is critical, such as community projects, non-profits, and decentralized autonomous organizations (DAOs). It empowers stakeholders by giving them direct control over fund allocation, ensuring their interests are represented and leading to more effective and accountable public goods institutions.
+### Functions
 
-### Development Deepdive
+- `instantiate`: Sets up the initial contract state and registers the contract to receive tokens.
+- `execute`: Handles the execution of different messages.
+- `execute_claim`: Allows users to claim their project tokens after the auction ends.
+- `execute_end_auction`: Ends the auction and transfers deposited tokens to the admin.
+- `execute_receive`: Parses incoming token transfers into deposit or auction start actions.
+- `receive_deposit`: Handles token deposits from users.
+- `receive_begin_auction`: Starts the auction by the admin.
 
-**Build Process**:
-The smart contract was developed on the Secret Network, leveraging its privacy-preserving features to ensure secure and confidential voting. The core components include staking functions, allocation input handling, and consensus calculation.
+## Setup
 
-**Contract/Function Interactions**:
-1. **Staking Function**: Users stake their ERTH tokens, which grants them voting power proportional to their staked amount.
-2. **Allocation Input**: Users enter their preferred fund allocation percentages, which are stored securely.
-3. **Consensus Calculation**: The contract calculates the weighted average of all stakers’ allocations to determine the final fund distribution. This ensures that each staker's vote is proportionate to their stake.
+### Prerequisites
 
-**Design Choices**:
-- **Privacy-Preserving**: Built on the Secret Network to ensure that individual votes and preferences remain confidential.
-- **Real-time Adjustments**: The staking function is integrated to adjust voting weights dynamically as staking amounts change, ensuring up-to-date consensus.
-- **Granular Control**: Allows for detailed and precise allocation preferences, promoting effective fund distribution.
+- [Rust](https://www.rust-lang.org/tools/install)
+- [CosmWasm](https://www.cosmwasm.com/docs/getting-started/installation)
 
-### Usage Instructions
+### Building the Contract
 
-1. **Get Testnet ERTH and Viewing Key**: To use the demo, acquire testnet ERTH and a viewing key from the Stake ERTH page. Ensure you have staked your ERTH tokens.
-2. **Enter Allocation Preferences**: Navigate to the allocation page (Governance tab, Deflation Fund) and enter your preferred split in percentages. The total must equal 100%.
-3. **View Results**: After reloading the page, you will see your preferred split and the weighted average of all stakers who declared an allocation.
+Clone the repository and navigate to the project directory:
 
-This project aims to revolutionize public goods funding by leveraging decentralized governance and secure, transparent smart contracts. Join us in creating a fairer, more efficient system for all!
+```sh
+git clone <repository-url>
+cd <project-directory>
+```
+
+Build the contract:
+
+```sh
+cargo wasm
+```
+
+### Running Tests
+
+Run the contract tests:
+
+```sh
+cargo test
+```
+
+## Usage
+
+### Instantiate the Contract
+
+Instantiate the contract with the initial state:
+
+```json
+{
+  "auction_admin": "<admin-address>",
+  "project_snip_contract": "<project-snip-contract-address>",
+  "project_snip_hash": "<project-snip-contract-hash>",
+  "paired_snip_contract": "<paired-snip-contract-address>",
+  "paired_snip_hash": "<paired-snip-contract-hash>"
+}
+```
+
+### Execute Messages
+
+- **Deposit Tokens**: Users can deposit paired tokens by sending a `ReceiveMsg::Deposit {}` message along with the token transfer.
+- **Begin Auction**: The admin can start the auction by sending a `ReceiveMsg::BeginAuction {}` message along with the project token transfer.
+- **End Auction**: The admin can end the auction by sending an `ExecuteMsg::EndAuction {}` message.
+- **Claim Tokens**: Users can claim their project tokens by sending an `ExecuteMsg::Claim {}` message after the auction ends.
+
+## Example Interactions
+
+### Deposit Tokens
+
+```json
+{
+  "send": {
+    "contract": "<contract-address>",
+    "amount": "<deposit-amount>",
+    "msg": "{\"deposit\":{}}"
+  }
+}
+```
+
+### Begin Auction
+
+```json
+{
+  "send": {
+    "contract": "<contract-address>",
+    "amount": "<auction-amount>",
+    "msg": "{\"begin_auction\":{}}"
+  }
+}
+```
+
+### End Auction
+
+```json
+{
+  "end_auction": {}
+}
+```
+
+### Claim Tokens
+
+```json
+{
+  "claim": {}
+}
+```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
