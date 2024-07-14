@@ -5,18 +5,16 @@ use cosmwasm_std::{
 };
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse, Snip20Msg,
-    ReceiveMsg, AllocationPercentage, AllocationResponse, AllocationOptionResponse,
+    ReceiveMsg, UnclaimedDepositResponse,
 };
-use crate::state::{STATE, State, DEPOSIT_AMOUNTS, ALLOCATION_OPTIONS, INDIVIDUAL_ALLOCATIONS, 
-    Allocation, INDIVIDUAL_PERCENTAGES,
-};
+use crate::state::{STATE, State, DEPOSITS,};
 
 
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, StdError> {
 
@@ -34,7 +32,7 @@ pub fn instantiate(
     STATE.save(deps.storage, &state)?;
 
     // Register receive for project token
-    let project_snip_msg = to_binary(&Snip20Msg::register_receive(env.contract.code_hash))?;
+    let project_snip_msg = to_binary(&Snip20Msg::register_receive(env.contract.code_hash.clone()))?;
     let project_snip_message = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: state.project_snip_contract.into_string(),
         code_hash: state.project_snip_hash,
@@ -81,36 +79,35 @@ pub fn execute(
 
 pub fn execute_claim(
     deps: DepsMut, 
-    env: Env, 
+    _env: Env, 
     info: MessageInfo
 ) -> Result<Response, StdError> {
 
-    let mut state = STATE.load(deps.storage)?;
-    let claimer = info.sender;
+    let state = STATE.load(deps.storage)?;
 
     if state.auction_active {
         return Err(StdError::generic_err("Auction still active"));
     }
 
-    let user_deposit = match DEPOSITS.may_load(deps.storage, &claimer)? {
-        Some(deposit) => deposit,
-        None => return Err(StdError::generic_err("No deposits found for user")),
-    };
+    // Get the user's deposit
+    let user_deposit = DEPOSITS.get(deps.storage, &info.sender)
+        .ok_or_else(|| StdError::generic_err("No deposits found for user"))?;
 
     // Calculate user's share
     let user_share = state.auction_amount * user_deposit / state.total_deposits;
 
     // Remove user's deposit record
-    DEPOSITS.remove(deps.storage, &claimer);
+    DEPOSITS.remove(deps.storage, &info.sender)?;
 
     // Transfer project token to user
     let transfer_msg = Snip20Msg::Transfer {
-        recipient: claimer.to_string(),
+        recipient: info.sender.clone(),
         amount: user_share,
+        padding: None,
     };
     let msg = to_binary(&transfer_msg)?;
     let transfer_message = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: state.project_snip_contract.clone(),
+        contract_addr: state.project_snip_contract.to_string(),
         code_hash: state.project_snip_hash.clone(),
         msg,
         funds: vec![],
@@ -125,7 +122,7 @@ pub fn execute_claim(
 
 pub fn execute_end_auction(
     deps: DepsMut, 
-    env: Env, 
+    _env: Env, 
     info: MessageInfo
 ) -> Result<Response, StdError> {
 
@@ -148,12 +145,13 @@ pub fn execute_end_auction(
 
     // Transfer paired token to admin
     let transfer_msg = Snip20Msg::Transfer {
-        recipient: info.sender.to_string(),
+        recipient: state.auction_admin,
         amount: state.total_deposits,
+        padding: None,
     };
     let msg = to_binary(&transfer_msg)?;
     let transfer_message = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: state.paired_snip_contract.clone(),
+        contract_addr: state.paired_snip_contract.to_string(),
         code_hash: state.paired_snip_hash.clone(),
         msg,
         funds: vec![],
@@ -180,8 +178,8 @@ pub fn execute_receive(
     let msg: ReceiveMsg = from_binary(&msg)?;
 
     match msg {
-        ReceiveMsg::Deposit {} => receive_deposit(deps, env, from, amount),
-        ReceiveMsg::BeginAuction {} => receive_begin_auction(deps, env, from, amount),
+        ReceiveMsg::Deposit {} => receive_deposit(deps, env, info, from, amount),
+        ReceiveMsg::BeginAuction {} => receive_begin_auction(deps, env, info, from, amount),
 
     }   
 }
@@ -189,17 +187,15 @@ pub fn execute_receive(
 pub fn receive_deposit(
     deps: DepsMut,
     _env: Env,
+    info: MessageInfo,
     from: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
     // check if there is already a deposit under address
-    let already_deposited_option: Option<Uint128> = DEPOSIT_AMOUNTS.get(deps.storage, &from);
-
-    // load state
-    let mut state = STATE.load(deps.storage)?;
+    let already_deposited_option: Option<Uint128> = DEPOSITS.get(deps.storage, &from);
 
     // check that the snip is the paired snip contract
-    let state = STATE.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
     if info.sender != state.paired_snip_contract {
         return Err(StdError::generic_err("invalid snip"));
     }
@@ -217,11 +213,11 @@ pub fn receive_deposit(
             let new_deposit_amount = existing_amount + amount;
 
             // Update the deposit amount in storage
-            DEPOSIT_AMOUNTS.insert(deps.storage, &from, &new_deposit_amount)?;
+            DEPOSITS.insert(deps.storage, &from, &new_deposit_amount)?;
         }
         None => {
             // If no existing amount, use the new amount directly
-            DEPOSIT_AMOUNTS.insert(deps.storage, &from, &amount)?;
+            DEPOSITS.insert(deps.storage, &from, &amount)?;
         }
     };
 
@@ -238,14 +234,13 @@ pub fn receive_deposit(
 pub fn receive_begin_auction(
     deps: DepsMut,
     _env: Env,
+    info: MessageInfo,
     from: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
-    
-    let mut state = STATE.load(deps.storage)?;
 
     // check for correct snip and admin
-    let state = STATE.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
     if info.sender != state.project_snip_contract {
         return Err(StdError::generic_err("invalid snip"));
     }
@@ -274,7 +269,7 @@ pub fn receive_begin_auction(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::QueryState {} => to_binary(&query_state(deps)?),
-        QueryMsg::QuertyDeposit{address} => to_binary(&query_deposit(deps, address)?),
+        QueryMsg::QueryDeposit{address} => to_binary(&query_deposit(deps, address)?),
     }
 }
 
@@ -283,16 +278,16 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
     Ok(StateResponse { state: state })
 }
 
-pub fn query_deposit(deps: Deps, address: Addr) -> StdResult<AllocationResponse> {
+pub fn query_deposit(deps: Deps, address: Addr) -> StdResult<UnclaimedDepositResponse> {
 
     // Query deposit amount
-    let unclaimed_deposit = DEPOSIT_AMOUNTS
+    let unclaimed_deposit = DEPOSITS
         .get(deps.storage, &address)
         .unwrap_or_else(|| Uint128::zero());
 
-    let allocation_response = AllocationResponse {
+    let unclaimed_deposit_response = UnclaimedDepositResponse {
         unclaimed_deposit: unclaimed_deposit,
     };
 
-    Ok(allocation_response)
+    Ok(unclaimed_deposit_response)
 }

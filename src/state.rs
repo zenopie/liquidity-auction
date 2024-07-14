@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Addr, Uint128};
 
 use secret_toolkit_storage::{Keymap, Item};
-use crate::msg::{AllocationPercentage};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 pub struct State {

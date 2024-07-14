@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize,};
 
 use cosmwasm_std::{Addr, Binary, Uint128,};
 
-use crate::state::{State, Allocation};
+use crate::state::{State,};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -38,9 +38,8 @@ pub enum ReceiveMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    GetState {},
-    GetUserInfo {address: Addr},
-    GetAllocationOptions {},
+    QueryState {},
+    QueryDeposit {address: Addr},
 }
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -49,15 +48,8 @@ pub struct StateResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
-pub struct AllocationOptionResponse {
-    pub allocations: Vec<Allocation>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
-pub struct AllocationResponse {
-    pub percentages: Vec<AllocationPercentage>,
-    pub allocations: Vec<Allocation>,
-    pub deposit: Uint128,
+pub struct UnclaimedDepositResponse {
+    pub unclaimed_deposit: Uint128,
 }
 
 // Messages sent to SNIP-20 contracts
@@ -73,10 +65,6 @@ pub enum Snip20Msg {
         amount: Uint128,
         padding: Option<String>,
     },
-    Mint {
-        recipient: Addr,
-        amount: Uint128,
-    },
 }
 
 impl Snip20Msg {
@@ -91,12 +79,6 @@ impl Snip20Msg {
             recipient,
             amount,
             padding: None, // TODO add padding calculation
-        }
-    }
-    pub fn mint_msg(recipient: Addr, amount: Uint128) -> Self {
-        Snip20Msg::Mint {
-            recipient,
-            amount,
         }
     }
 }
