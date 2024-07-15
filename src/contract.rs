@@ -200,8 +200,7 @@ pub fn receive_deposit(
         return Err(StdError::generic_err("invalid snip"));
     }
 
-    //check that the auction is active
-    // check that the auction is inactive
+    // check that the auction is active
     if !state.auction_active {
         return Err(StdError::generic_err("auction is not active"));
     }
